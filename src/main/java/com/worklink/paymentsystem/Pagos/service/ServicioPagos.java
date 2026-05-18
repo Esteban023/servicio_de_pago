@@ -81,6 +81,7 @@ public class ServicioPagos {
         pago.setMetodoPago(
             pagoRequest.getMetodoPago()
         );
+
         pago.setComision(comision);
         pago.setMontoNeto(montoNeto);
         pago.setMoneda("COP");
@@ -212,7 +213,9 @@ public class ServicioPagos {
 
     private void procesarTarjeta(Pago pago, PagoRequest pagoRequest) {
         // Asignar token de Stripe antes de cobrar
-        pago.setTokenPasarela(pagoRequest.getTarjeta().getTokenTarjeta());
+        pago.setTokenPasarela(
+            pagoRequest.getTarjeta().getTokenTarjeta()
+        );
 
         PaymentIntent intent = stripeService.cobrar(pago);
 
