@@ -29,5 +29,8 @@ build/
 !**/src/main/**/build/
 !**/src/test/**/build/
 
+# Archivos de entorno
+.env
+
 ### VS Code ###
 .vscode/
