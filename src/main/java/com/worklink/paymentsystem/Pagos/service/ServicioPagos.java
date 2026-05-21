@@ -8,6 +8,7 @@ import java.util.Optional;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import com.stripe.model.PaymentIntent;
 import com.worklink.paymentsystem.Pagos.Exceptions.PagoFallidoException;
@@ -53,51 +54,36 @@ public class ServicioPagos {
     // ─────────────────────────────────────────
     // PROCESAR PAGO
     // ─────────────────────────────────────────
+    @Transactional
     public PagoResponse procesarPago(PagoRequest pagoRequest) {
         log.info(
             "Iniciando procesamiento de pago para cliente {} y servicio {}",
             pagoRequest.getClienteID(), pagoRequest.getServicioID()
         );
 
-        //Validar servicio y monto
         ServiceResponse servicio = pagoValidator.validarPago(pagoRequest);
 
         BigDecimal comision = pagoRequest.getMonto().multiply(new BigDecimal("0.10"));
         BigDecimal montoNeto = pagoRequest.getMonto().subtract(comision);
 
         Pago pago = new Pago();
-        pago.setClienteID(
-            pagoRequest.getClienteID()
-        );
-        pago.setProveedorID(
-            servicio.getIdProveedor()
-        );
-        pago.setServicioID(
-            pagoRequest.getServicioID()
-        );
-        pago.setMonto(
-            pagoRequest.getMonto()
-        );
-        pago.setMetodoPago(
-            pagoRequest.getMetodoPago()
-        );
-
+        pago.setClienteID(pagoRequest.getClienteID());
+        pago.setProveedorID(servicio.getIdProveedor());
+        pago.setServicioID(pagoRequest.getServicioID());
+        pago.setMonto(pagoRequest.getMonto());
+        pago.setMetodoPago(pagoRequest.getMetodoPago());
         pago.setComision(comision);
         pago.setMontoNeto(montoNeto);
         pago.setMoneda("COP");
         pago.setEstadoPago(EstadoPago.PENDIENTE);
-
-        pago.setTokenConfirmacion(
-            generarTokenConfirmacion()
-        );
+        pago.setTokenConfirmacion(generarTokenConfirmacion());
         pago.setTokenUsado(false);
 
-        //Persistir en PENDIENTE
         pago = pagoRepository.save(pago);
 
         try {
             procesarSegunMetodo(pago, pagoRequest);
-            pago.setEstadoPago(EstadoPago.RETENIDO); // Retenemos el pago hasta que el cliente confirme el servicio
+            pago.setEstadoPago(EstadoPago.RETENIDO);
             pago.setProcessedAt(LocalDateTime.now());
             log.info("Pago {} retenido exitosamente", pago.getId());
 
@@ -105,9 +91,7 @@ public class ServicioPagos {
             pago.setEstadoPago(EstadoPago.ERROR);
             pago.setMotivoRechazo(e.getMessage());
             pagoRepository.save(pago);
-            log.error(
-                "Error al procesar el pago {}: {}", pago.getId(), e.getMessage()
-            );
+            log.error("Error al procesar el pago {}: {}", pago.getId(), e.getMessage());
             throw new PagoFallidoException("El pago no pudo ser procesado: " + e.getMessage());
         }
 
@@ -122,14 +106,18 @@ public class ServicioPagos {
     // ─────────────────────────────────────────
     // CONFIRMAR CON TOKEN
     // ─────────────────────────────────────────
+    @Transactional
     public PagoResponse confirmarConToken(String token, Long prestadorID) {
 
-        Optional<Pago> pagoOpt = pagoRepository.findByTokenConfirmacion(token);
+        // Lock pesimista: bloquea la fila hasta el commit para impedir
+        // que dos requests con el mismo token capturen dos veces.
+        Optional<Pago> pagoOpt = pagoRepository.findByTokenConfirmacionForUpdate(token);
 
-        if (!pagoOpt.isPresent()) {
+        if (pagoOpt.isEmpty()) {
             throw new TokenInvalidoException("Token de confirmación inválido");
         }
         Pago pago = pagoOpt.get();
+
         if (pago.getTokenUsado()) {
             throw new TokenInvalidoException("Este token ya fue utilizado");
         }
@@ -138,30 +126,34 @@ public class ServicioPagos {
             throw new PagoFallidoException("El pago no está en estado de retención");
         }
 
-        //Obtener cuenta bancaria del proveedor
+        // Autorización mínima: el prestadorID del request debe coincidir
+        // con el proveedor dueño del servicio cobrado. Sin esto, cualquiera
+        // con el token podría enrutar la transferencia a otra cuenta.
+        if (pago.getProveedorID() == null || !pago.getProveedorID().equals(prestadorID)) {
+            log.warn(
+                "Intento de confirmación no autorizado: pago {} pertenece a proveedor {}, request usó prestadorID {}",
+                pago.getId(), pago.getProveedorID(), prestadorID
+            );
+            throw new TokenInvalidoException("El token no pertenece a este proveedor");
+        }
+
         ProveedorBancarioResponse cuenta = perfilProveedor.obtenerCuentaBancaria(prestadorID);
 
         if (cuenta == null || cuenta.getNumeroCuenta() == null) {
-            throw new RuntimeException(
+            throw new PagoFallidoException(
                 "El proveedor " + prestadorID + " no tiene cuenta bancaria registrada"
             );
         }
-        
-        //Capturar el dinero en Stripe (queda en cuenta de Worklink)
-        stripeService.capturarPago(
-            pago.getStripePaymentIntentId()
-        );
+
+        // Captura en Stripe (idempotente por payment intent id).
+        // Si la BD falla después de este punto, el retry con la misma
+        // idempotency key no recapturará — Stripe devuelve el intent ya capturado.
+        stripeService.capturarPago(pago.getStripePaymentIntentId());
 
         TransferenciaPendiente transferencia = new TransferenciaPendiente();
-        transferencia.setProveedorID(
-            prestadorID
-        );
-        transferencia.setPagoID(
-            pago.getId()
-        );
-        transferencia.setMonto(
-            pago.getMontoNeto()
-        );
+        transferencia.setProveedorID(prestadorID);
+        transferencia.setPagoID(pago.getId());
+        transferencia.setMonto(pago.getMontoNeto());
         transferencia.setTitular(cuenta.getTitular());
         transferencia.setBanco(cuenta.getBanco());
         transferencia.setTipoCuenta(cuenta.getTipoCuenta());
@@ -169,7 +161,6 @@ public class ServicioPagos {
         transferencia.setDocumento(cuenta.getDocumento());
         transferenciaRepository.save(transferencia);
 
-        //Se actualiza el pago a EXITOSO y se marca el token como usado
         pago.setEstadoPago(EstadoPago.EXITOSO);
         pago.setTokenUsado(true);
         pago.setReleasedAt(LocalDateTime.now());
@@ -188,6 +179,7 @@ public class ServicioPagos {
     // ─────────────────────────────────────────
     // OBTENER PAGO POR TOKEN
     // ─────────────────────────────────────────
+    @Transactional(readOnly = true)
     public PagoResponse obtenerPagoPorToken(String token) {
         Optional<Pago> pagoOptional = pagoRepository.findByTokenConfirmacion(token);
 
@@ -212,35 +204,28 @@ public class ServicioPagos {
     }
 
     private void procesarTarjeta(Pago pago, PagoRequest pagoRequest) {
-        // Asignar token de Stripe antes de cobrar
-        pago.setTokenPasarela(
-            pagoRequest.getTarjeta().getTokenTarjeta()
-        );
+        if (pagoRequest.getTarjeta() == null) {
+            throw new PagoFallidoException("Datos de tarjeta requeridos para método TARJETA");
+        }
+
+        pago.setTokenPasarela(pagoRequest.getTarjeta().getTokenTarjeta());
 
         PaymentIntent intent = stripeService.cobrar(pago);
 
-        pago.setTransactionID(
-            intent.getId()
-        );
-        pago.setStripePaymentIntentId(
-            intent.getId()
-        );
+        pago.setTransactionID(intent.getId());
+        pago.setStripePaymentIntentId(intent.getId());
 
         log.info("Tarjeta procesada. IntentID: {}", intent.getId());
     }
 
     private void procesarPSE(Pago pago) {
         // Pendiente de implementación
-        log.info(
-            "Procesando PSE para pago {}", pago.getId()
-        );
+        log.info("Procesando PSE para pago {}", pago.getId());
     }
 
     private void procesarEfectivo(Pago pago) {
         // Pendiente de implementación
-        log.info(
-            "Procesando efectivo para pago {}", pago.getId()
-        );
+        log.info("Procesando efectivo para pago {}", pago.getId());
     }
 
     private String generarTokenConfirmacion() {
@@ -248,13 +233,8 @@ public class ServicioPagos {
         StringBuilder token = new StringBuilder();
         SecureRandom random = new SecureRandom();
         for (int i = 0; i < 8; i++) {
-            token.append(caracteres.charAt(
-                random.nextInt(
-                    caracteres.length()
-                )
-            )
-            );
+            token.append(caracteres.charAt(random.nextInt(caracteres.length())));
         }
-        return token.toString(); // Ej: "K7M2P9XQ"
+        return token.toString();
     }
 }

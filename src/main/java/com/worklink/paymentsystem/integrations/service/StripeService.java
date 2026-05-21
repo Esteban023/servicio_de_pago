@@ -1,8 +1,13 @@
 package com.worklink.paymentsystem.integrations.service;
 
+import java.math.BigDecimal;
+import java.math.RoundingMode;
+import java.util.Set;
+
 import com.stripe.exception.CardException;
 import com.stripe.exception.StripeException;
 import com.stripe.model.PaymentIntent;
+import com.stripe.net.RequestOptions;
 import com.stripe.param.PaymentIntentCreateParams;
 import com.worklink.paymentsystem.Pagos.Exceptions.PagoFallidoException;
 import com.worklink.paymentsystem.Pagos.model.Pago;
@@ -16,10 +21,16 @@ public class StripeService {
 
     private static final Logger log = LoggerFactory.getLogger(StripeService.class);
 
+    // Monedas Stripe sin decimales (https://stripe.com/docs/currencies#zero-decimal)
+    private static final Set<String> ZERO_DECIMAL_CURRENCIES = Set.of(
+        "BIF", "CLP", "DJF", "GNF", "JPY", "KMF", "KRW", "MGA",
+        "PYG", "RWF", "UGX", "VND", "VUV", "XAF", "XOF", "XPF"
+    );
+
     public PaymentIntent cobrar(Pago pago) {
         try {
             PaymentIntentCreateParams params = PaymentIntentCreateParams.builder()
-                .setAmount(pago.getMonto().longValue() * 100L)
+                .setAmount(toStripeMinorUnits(pago.getMonto(), pago.getMoneda()))
                 .setCurrency(pago.getMoneda().toLowerCase())
                 .setPaymentMethod(pago.getTokenPasarela())
                 .setConfirm(true)
@@ -32,7 +43,11 @@ public class StripeService {
                 .putMetadata("clienteID", pago.getClienteID().toString())
                 .build();
 
-            PaymentIntent intent = PaymentIntent.create(params);
+            RequestOptions opts = RequestOptions.builder()
+                .setIdempotencyKey("pago-create-" + pago.getId())
+                .build();
+
+            PaymentIntent intent = PaymentIntent.create(params, opts);
             log.info("PaymentIntent creado en modo retención: {}", intent.getId());
             return intent;
 
@@ -49,12 +64,25 @@ public class StripeService {
     public void capturarPago(String stripePaymentIntentId) {
         try {
             PaymentIntent intent = PaymentIntent.retrieve(stripePaymentIntentId);
-            intent.capture();
+
+            RequestOptions opts = RequestOptions.builder()
+                .setIdempotencyKey("pago-capture-" + stripePaymentIntentId)
+                .build();
+
+            intent.capture(opts);
             log.info("PaymentIntent {} capturado exitosamente", stripePaymentIntentId);
 
         } catch (StripeException e) {
             log.error("Error capturando pago {}: {}", stripePaymentIntentId, e.getMessage());
             throw new PagoFallidoException("Error capturando el pago: " + e.getMessage());
         }
+    }
+
+    private long toStripeMinorUnits(BigDecimal amount, String currency) {
+        String c = currency == null ? "" : currency.toUpperCase();
+        BigDecimal multiplier = ZERO_DECIMAL_CURRENCIES.contains(c)
+            ? BigDecimal.ONE
+            : BigDecimal.valueOf(100);
+        return amount.multiply(multiplier).setScale(0, RoundingMode.UNNECESSARY).longValueExact();
     }
 }
