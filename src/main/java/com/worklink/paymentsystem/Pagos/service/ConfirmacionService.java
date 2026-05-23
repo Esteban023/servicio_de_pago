@@ -3,8 +3,10 @@ package com.worklink.paymentsystem.Pagos.service;
 import com.worklink.paymentsystem.Pagos.Exceptions.PagoFallidoException;
 import com.worklink.paymentsystem.Pagos.Exceptions.TokenInvalidoException;
 import com.worklink.paymentsystem.Pagos.dto.Response.PagoResponse;
+import com.worklink.paymentsystem.Pagos.dto.Response.TransferenciaResponse;
 import com.worklink.paymentsystem.Pagos.enums.EstadoPago;
 import com.worklink.paymentsystem.Pagos.mapper.PagoMapper;
+import com.worklink.paymentsystem.Pagos.mapper.TransferenciaMapper;
 import com.worklink.paymentsystem.Pagos.model.Pago;
 import com.worklink.paymentsystem.Pagos.model.TransferenciaPendiente;
 import com.worklink.paymentsystem.Pagos.repository.PagoRepository;
@@ -37,7 +39,7 @@ public class ConfirmacionService {
     // ─────────────────────────────────────────
     // CONFIRMAR CON TOKEN
     // ─────────────────────────────────────────
-    public PagoResponse confirmarConToken(String token, Long prestadorID) {
+    public TransferenciaResponse confirmarConToken(String token, Long prestadorID) {
 
         Optional<Pago> pagoOpt = pagoRepository.findByTokenConfirmacionForUpdate(token);
         if (!pagoOpt.isPresent()) {
@@ -70,7 +72,7 @@ public class ConfirmacionService {
             pago.getStripePaymentIntentId()
         );
 
-        crearTransferencia(pago, cuenta, prestadorID);
+        TransferenciaPendiente transferencia = crearTransferencia(pago, cuenta, prestadorID);
         
         //Actualizar el pago
         pago.setEstadoPago(EstadoPago.EXITOSO);
@@ -83,10 +85,10 @@ public class ConfirmacionService {
             pago.getId(), prestadorID
         );
         
-        return PagoMapper.pagoToResponse(pago, "Servicio confirmado. El pago será transferido al proveedor en breve.");
+        return TransferenciaMapper.transferenciaToResponse(transferencia, "Servicio confirmado. El pago será transferido al proveedor en breve.");
     }
 
-    private void crearTransferencia(Pago pago, ProveedorBancarioResponse cuenta, Long prestadorID) {
+    private TransferenciaPendiente crearTransferencia(Pago pago, ProveedorBancarioResponse cuenta, Long prestadorID) {
         TransferenciaPendiente transferencia = new TransferenciaPendiente();
         transferencia.setProveedorID(prestadorID);
         transferencia.setPagoID(pago.getId());
@@ -102,6 +104,8 @@ public class ConfirmacionService {
             "Transferencia pendiente creada para pago {}: {} {} a {}",
             pago.getId(), transferencia.getMonto(), pago.getMoneda(), cuenta.getNumeroCuenta()
         );
+        
+        return transferencia;
     }
 
     

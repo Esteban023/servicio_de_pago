@@ -31,7 +31,8 @@ public class TransferenciaController {
     public ResponseEntity<Void> marcarComoTransferido(@PathVariable @NonNull UUID id) {
         
         TransferenciaPendiente transferencia = transferenciaRepository.findById(id)
-            .orElseThrow(() -> new RuntimeException("Transferencia no encontrada")
+            .orElseThrow(
+                () -> new RuntimeException("Transferencia no encontrada")
         );
 
         transferencia.setEstado("TRANSFERIDO");

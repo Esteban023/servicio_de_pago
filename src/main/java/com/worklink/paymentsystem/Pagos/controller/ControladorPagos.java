@@ -5,23 +5,21 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import jakarta.validation.Valid;
+import lombok.RequiredArgsConstructor;
 
 import com.worklink.paymentsystem.Pagos.dto.Request.PagoRequest;
 import com.worklink.paymentsystem.Pagos.dto.Response.PagoResponse;
+import com.worklink.paymentsystem.Pagos.dto.Response.TransferenciaResponse;
 import com.worklink.paymentsystem.Pagos.service.ConfirmacionService;
 import com.worklink.paymentsystem.Pagos.service.ServicioPagos;
 
 @RestController
+@RequiredArgsConstructor
 @RequestMapping("/api-pagos")
 public class ControladorPagos {
 
     private final ServicioPagos pagoService;
     private final ConfirmacionService confirmacionService;
-
-    public ControladorPagos(ServicioPagos pagoService, ConfirmacionService confirmacionService) {
-        this.pagoService = pagoService;
-        this.confirmacionService = confirmacionService;
-    }
 
     @PostMapping
     public ResponseEntity<PagoResponse> realizarPago(
@@ -32,11 +30,11 @@ public class ControladorPagos {
     }
 
     @PostMapping("/confirmar")
-    public ResponseEntity<PagoResponse> confirmarConToken(
+    public ResponseEntity<TransferenciaResponse> confirmarConToken(
         @RequestParam String token,
         @RequestParam Long prestadorID
     ) {
-        PagoResponse response = confirmacionService.confirmarConToken(token, prestadorID);
+        TransferenciaResponse response = confirmacionService.confirmarConToken(token, prestadorID);
         return ResponseEntity.ok(response);
     }
 }

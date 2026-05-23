@@ -53,25 +53,36 @@ public class TransferenciaPendiente {
     // Getters y setters
     public void setId(UUID id) { this.id = id; }
     public UUID getId() { return id; }
+
     public Long getProveedorID() { return proveedorID; }
     public void setProveedorID(Long proveedorID) { this.proveedorID = proveedorID; }
+
     public UUID getPagoID() { return pagoID; }
     public void setPagoID(UUID pagoID) { this.pagoID = pagoID; }
+
     public BigDecimal getMonto() { return monto; }
     public void setMonto(BigDecimal monto) { this.monto = monto; }
+
     public String getTitular() { return titular; }
     public void setTitular(String titular) { this.titular = titular; }
+
     public String getBanco() { return banco; }
     public void setBanco(String banco) { this.banco = banco; }
+
     public String getTipoCuenta() { return tipoCuenta; }
     public void setTipoCuenta(String tipoCuenta) { this.tipoCuenta = tipoCuenta; }
+
     public String getNumeroCuenta() { return numeroCuenta; }
     public void setNumeroCuenta(String numeroCuenta) { this.numeroCuenta = numeroCuenta; }
+
     public String getDocumento() { return documento; }
     public void setDocumento(String documento) { this.documento = documento; }
+
     public String getEstado() { return estado; }
     public void setEstado(String estado) { this.estado = estado; }
+
     public LocalDateTime getCreatedAt() { return createdAt; }
+    
     public LocalDateTime getTransferidoAt() { return transferidoAt; }
     public void setTransferidoAt(LocalDateTime transferidoAt) { this.transferidoAt = transferidoAt; }
 }
