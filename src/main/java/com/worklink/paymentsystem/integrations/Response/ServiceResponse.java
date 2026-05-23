@@ -4,9 +4,9 @@ import java.math.BigDecimal;
 
 public class ServiceResponse {
 
-    private String nombreServicio;
+    private String titulo;
     private BigDecimal precio;
-    private Long idProveedor;
+    private Long proveedorId;
 
     public ServiceResponse() {
 
@@ -20,20 +20,20 @@ public class ServiceResponse {
         this.precio = precio;
     }
 
-    public Long getIdProveedor() {
-        return idProveedor;
+    public Long getProveedorId() {
+        return proveedorId;
     }
 
-    public void setIdProveedor(Long idProveedor) {
-        this.idProveedor = idProveedor;
+    public void setProveedorId(Long proveedorId) {
+        this.proveedorId = proveedorId;
     }
 
-    public String getNombreServicio() {
-        return nombreServicio;
+    public String getTitulo() {
+        return titulo;
     }
 
-    public void setNombreServicio(String nombreServicio) {
-        this.nombreServicio = nombreServicio;
+    public void setTitulo(String titulo) {
+        this.titulo = titulo;
     }
 
 }

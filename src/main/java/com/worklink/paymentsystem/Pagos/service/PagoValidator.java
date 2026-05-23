@@ -20,7 +20,7 @@ public class PagoValidator {
 
     public ServiceResponse validarPago(PagoRequest pagoRequest) {
 
-        // 1. Verificar que el servicio existe
+        //Verificar que el servicio existe
         ServiceResponse servicio = servicioClient.buscarPorId(
             pagoRequest.getServicioID()
         );
@@ -31,17 +31,13 @@ public class PagoValidator {
             );
         }
 
-        // 2. Verificar que el monto coincide con el precio real del servicio
-        if (pagoRequest.getMonto().compareTo(servicio.getPrecio()) != 0) {
-            throw new MontoInvalidoException(
-                "El monto enviado (" + pagoRequest.getMonto() +
-                ") no coincide con el precio del servicio (" + servicio.getPrecio() + ")"
-            );
+        BigDecimal multiploCien = new BigDecimal(100);
+        if (pagoRequest.getMonto().remainder(multiploCien).compareTo(BigDecimal.ZERO) != 0) {
+            throw new MontoInvalidoException("El monto debe ser múltiplo de 100 pesos");
         }
 
-        // 3. Verificar que el monto sea positivo (doble verificación a nivel de negocio)
-        if (pagoRequest.getMonto().compareTo(BigDecimal.ZERO) <= 0) {
-            throw new MontoInvalidoException("El monto debe ser mayor a cero");
+        if (pagoRequest.getMonto().compareTo(new BigDecimal(1000)) < 0) {
+            throw new MontoInvalidoException("El monto mínimo de cobro es 1000 COP");
         }
 
         return servicio;

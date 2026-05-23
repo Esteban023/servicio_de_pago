@@ -3,9 +3,14 @@ package com.worklink.paymentsystem.integrations.service;
 import com.stripe.exception.CardException;
 import com.stripe.exception.StripeException;
 import com.stripe.model.PaymentIntent;
+import com.stripe.net.RequestOptions;
 import com.stripe.param.PaymentIntentCreateParams;
 import com.worklink.paymentsystem.Pagos.Exceptions.PagoFallidoException;
 import com.worklink.paymentsystem.Pagos.model.Pago;
+
+import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
+import io.github.resilience4j.retry.annotation.Retry;
+
 import org.springframework.stereotype.Service;
 
 import org.slf4j.Logger;
@@ -16,6 +21,8 @@ public class StripeService {
 
     private static final Logger log = LoggerFactory.getLogger(StripeService.class);
 
+    @Retry(name = "stripe", fallbackMethod = "cobrarFallback")
+    @CircuitBreaker(name = "stripe")
     public PaymentIntent cobrar(Pago pago) {
         try {
             PaymentIntentCreateParams params = PaymentIntentCreateParams.builder()
@@ -32,7 +39,14 @@ public class StripeService {
                 .putMetadata("clienteID", pago.getClienteID().toString())
                 .build();
 
-            PaymentIntent intent = PaymentIntent.create(params);
+            // 🔑 Clave de idempotencia derivada del ID interno del pago
+            RequestOptions options = RequestOptions.builder()
+            .setIdempotencyKey(
+                "pago_" + pago.getId()
+            )
+            .build();
+
+            PaymentIntent intent = PaymentIntent.create(params, options);
             log.info("PaymentIntent creado en modo retención: {}", intent.getId());
             return intent;
 

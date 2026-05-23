@@ -12,6 +12,8 @@ import com.worklink.paymentsystem.Pagos.repository.TransferenciaPendienteReposit
 import com.worklink.paymentsystem.integrations.Response.ProveedorBancarioResponse;
 import com.worklink.paymentsystem.integrations.service.PerfilProveedor;
 import com.worklink.paymentsystem.integrations.service.StripeService;
+
+import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -19,6 +21,7 @@ import java.util.Optional;
 import java.time.LocalDateTime;
 
 @Service
+@Transactional
 @RequiredArgsConstructor
 @Slf4j
 public class ConfirmacionService {
@@ -30,14 +33,21 @@ public class ConfirmacionService {
 
     private final PerfilProveedor perfilProveedor;
 
+    // ─────────────────────────────────────────
+    // CONFIRMAR CON TOKEN
+    // ─────────────────────────────────────────
     public PagoResponse confirmarConToken(String token, Long prestadorID) {
 
-        Optional<Pago> pagoOpt = pagoRepository.findByTokenConfirmacion(token);
+        Optional<Pago> pagoOpt = pagoRepository.findByTokenConfirmacionForUpdate(token);
         if (!pagoOpt.isPresent()) {
             throw new TokenInvalidoException("Token de confirmación inválido");
         }
 
         Pago pago = pagoOpt.get();
+        if (!pago.getProveedorID().equals(prestadorID)) {
+            throw new PagoFallidoException("El proveedor no coincide con el del pago");
+        }
+
         if (pago.getTokenUsado()) {
             throw new TokenInvalidoException("Este token ya fue utilizado");
         }
@@ -55,17 +65,26 @@ public class ConfirmacionService {
         }
 
         //Capturar el dinero en Stripe (ya queda en cuenta de Worklink)
-        stripeService.capturarPago(pago.getStripePaymentIntentId());
+        stripeService.capturarPago(
+            pago.getStripePaymentIntentId()
+        );
 
-        TransferenciaPendiente transferencia = new TransferenciaPendiente();
-        transferencia.setProveedorID(prestadorID);
-        transferencia.setPagoID(pago.getId());
-        transferencia.setMonto(pago.getMontoNeto()); // sin comisión de Worklink
-        transferencia.setTitular(cuenta.getTitular());
-        transferencia.setBanco(cuenta.getBanco());
-        transferencia.setTipoCuenta(cuenta.getTipoCuenta());
-        transferencia.setNumeroCuenta(cuenta.getNumeroCuenta());
-        transferencia.setDocumento(cuenta.getDocumento());
+        TransferenciaPendiente transferencia = crearTransferencia(pago, cuenta, prestadorID);
+
+        //Capturar el dinero en Stripe (ya queda en cuenta de Worklink)
+        stripeService.capturarPago(
+            pago.getStripePaymentIntentId()
+        );
+
+        transferencia.setTipoCuenta(
+            cuenta.getTipoCuenta()
+        );
+        transferencia.setNumeroCuenta(
+            cuenta.getNumeroCuenta()
+        );
+        transferencia.setDocumento(
+            cuenta.getDocumento()
+        );
         transferenciaRepository.save(transferencia);
 
         //Actualizar el pago
@@ -79,9 +98,20 @@ public class ConfirmacionService {
             pago.getId(), prestadorID
         );
         
-        PagoResponse response = PagoMapper.pagoToResponse(pago, "Servicio confirmado. El pago será transferido al proveedor en breve.");
+        return PagoMapper.pagoToResponse(pago, "Servicio confirmado. El pago será transferido al proveedor en breve.");
+    }
 
-        return response;
+    private TransferenciaPendiente crearTransferencia(Pago pago, ProveedorBancarioResponse cuenta, Long prestadorID) {
+        TransferenciaPendiente transferencia = new TransferenciaPendiente();
+        transferencia.setProveedorID(prestadorID);
+        transferencia.setPagoID(pago.getId());
+        transferencia.setMonto(pago.getMontoNeto()); // sin comisión de Worklink
+        transferencia.setTitular(cuenta.getTitular());
+        transferencia.setBanco(cuenta.getBanco());
+        transferencia.setTipoCuenta(cuenta.getTipoCuenta());
+        transferencia.setNumeroCuenta(cuenta.getNumeroCuenta());
+        transferencia.setDocumento(cuenta.getDocumento());
+        return transferencia;
     }
 
     

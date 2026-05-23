@@ -21,14 +21,18 @@ public class TransferenciaController {
     // Ver todas las transferencias pendientes (panel admin de Worklink)
     @GetMapping("/pendientes")
     public ResponseEntity<List<TransferenciaPendiente>> obtenerPendientes() {
-        return ResponseEntity.ok(transferenciaRepository.findByEstado("PENDIENTE"));
+        return ResponseEntity.ok(
+            transferenciaRepository.findByEstado("PENDIENTE")
+        );
     }
 
     // Marcar como transferido después de hacer la transferencia bancaria manual
     @PutMapping("/{id}/transferido")
     public ResponseEntity<Void> marcarComoTransferido(@PathVariable @NonNull UUID id) {
+        
         TransferenciaPendiente transferencia = transferenciaRepository.findById(id)
-            .orElseThrow(() -> new RuntimeException("Transferencia no encontrada"));
+            .orElseThrow(() -> new RuntimeException("Transferencia no encontrada")
+        );
 
         transferencia.setEstado("TRANSFERIDO");
         transferencia.setTransferidoAt(LocalDateTime.now());

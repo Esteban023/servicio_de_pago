@@ -46,6 +46,7 @@ public class TransferenciaPendiente {
     private LocalDateTime transferidoAt;
 
     public TransferenciaPendiente() {
+        this.id = UUID.randomUUID();
         this.createdAt = LocalDateTime.now();
         this.estado = "PENDIENTE";
     }

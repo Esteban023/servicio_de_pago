@@ -27,7 +27,7 @@ public class Pago {
     @Column(nullable = false, unique = true)
     private String referencia;
 
-    @Column(nullable = false, unique = true)
+    @Column(nullable = true, unique = true)
     private String transactionID;
 
     @Column(nullable = false)
@@ -76,7 +76,6 @@ public class Pago {
 
     public Pago() {
         this.createdAt = LocalDateTime.now();
-        this.transactionID = UUID.randomUUID().toString();
         this.referencia = "PAY-" + System.currentTimeMillis();
     }
 

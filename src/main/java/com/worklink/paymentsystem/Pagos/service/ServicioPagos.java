@@ -1,55 +1,39 @@
 package com.worklink.paymentsystem.Pagos.service;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.security.SecureRandom;
 import java.time.LocalDateTime;
 import java.util.Optional;
-
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
-
 import com.stripe.model.PaymentIntent;
 import com.worklink.paymentsystem.Pagos.Exceptions.PagoFallidoException;
-import com.worklink.paymentsystem.Pagos.Exceptions.TokenInvalidoException;
 import com.worklink.paymentsystem.Pagos.dto.Request.PagoRequest;
 import com.worklink.paymentsystem.Pagos.dto.Response.PagoResponse;
 import com.worklink.paymentsystem.Pagos.enums.EstadoPago;
 import com.worklink.paymentsystem.Pagos.mapper.PagoMapper;
 import com.worklink.paymentsystem.Pagos.model.Pago;
-import com.worklink.paymentsystem.Pagos.model.TransferenciaPendiente;
 import com.worklink.paymentsystem.Pagos.repository.PagoRepository;
-import com.worklink.paymentsystem.Pagos.repository.TransferenciaPendienteRepository;
-import com.worklink.paymentsystem.integrations.Response.ProveedorBancarioResponse;
 import com.worklink.paymentsystem.integrations.Response.ServiceResponse;
-import com.worklink.paymentsystem.integrations.service.PerfilProveedor;
 import com.worklink.paymentsystem.integrations.service.StripeService;
 
-@Service
-public class ServicioPagos {
+import lombok.RequiredArgsConstructor;
 
-    private static final Logger log = LoggerFactory.getLogger(ServicioPagos.class);
+
+@Service
+@RequiredArgsConstructor
+public class ServicioPagos {
 
     private final StripeService stripeService;
     private final PagoValidator pagoValidator;
     private final PagoRepository pagoRepository;
-    private final PerfilProveedor perfilProveedor;
-    private final TransferenciaPendienteRepository transferenciaRepository;
+    private static final Logger log = LoggerFactory.getLogger(ServicioPagos.class);
 
-    public ServicioPagos(
-        StripeService stripeService,
-        PagoValidator pagoValidator,
-        PagoRepository pagoRepository,
-        TransferenciaPendienteRepository transferenciaRepository,
-        PerfilProveedor perfilProveedor
-    ) {
-        this.stripeService = stripeService;
-        this.pagoValidator = pagoValidator;
-        this.pagoRepository = pagoRepository;
-        this.transferenciaRepository = transferenciaRepository;
-        this.perfilProveedor = perfilProveedor;
-    }
-
+    @Value("${worklink.comision.porcentaje:0.10}")
+    private BigDecimal comisionPorcentaje;
     // ─────────────────────────────────────────
     // PROCESAR PAGO
     // ─────────────────────────────────────────
@@ -62,7 +46,7 @@ public class ServicioPagos {
         //Validar servicio y monto
         ServiceResponse servicio = pagoValidator.validarPago(pagoRequest);
 
-        BigDecimal comision = pagoRequest.getMonto().multiply(new BigDecimal("0.10"));
+        BigDecimal comision = pagoRequest.getMonto().multiply(comisionPorcentaje).setScale(2, RoundingMode.HALF_UP);
         BigDecimal montoNeto = pagoRequest.getMonto().subtract(comision);
 
         Pago pago = new Pago();
@@ -70,7 +54,7 @@ public class ServicioPagos {
             pagoRequest.getClienteID()
         );
         pago.setProveedorID(
-            servicio.getIdProveedor()
+            servicio.getProveedorId()
         );
         pago.setServicioID(
             pagoRequest.getServicioID()
@@ -115,73 +99,7 @@ public class ServicioPagos {
 
         return PagoMapper.pagoToResponse(pago,
             "Pago retenido. Entrega el token al proveedor cuando complete el servicio: "
-            + servicio.getNombreServicio()
-        );
-    }
-
-    // ─────────────────────────────────────────
-    // CONFIRMAR CON TOKEN
-    // ─────────────────────────────────────────
-    public PagoResponse confirmarConToken(String token, Long prestadorID) {
-
-        Optional<Pago> pagoOpt = pagoRepository.findByTokenConfirmacion(token);
-
-        if (!pagoOpt.isPresent()) {
-            throw new TokenInvalidoException("Token de confirmación inválido");
-        }
-        Pago pago = pagoOpt.get();
-        if (pago.getTokenUsado()) {
-            throw new TokenInvalidoException("Este token ya fue utilizado");
-        }
-
-        if (pago.getEstadoPago() != EstadoPago.RETENIDO) {
-            throw new PagoFallidoException("El pago no está en estado de retención");
-        }
-
-        //Obtener cuenta bancaria del proveedor
-        ProveedorBancarioResponse cuenta = perfilProveedor.obtenerCuentaBancaria(prestadorID);
-
-        if (cuenta == null || cuenta.getNumeroCuenta() == null) {
-            throw new RuntimeException(
-                "El proveedor " + prestadorID + " no tiene cuenta bancaria registrada"
-            );
-        }
-        
-        //Capturar el dinero en Stripe (queda en cuenta de Worklink)
-        stripeService.capturarPago(
-            pago.getStripePaymentIntentId()
-        );
-
-        TransferenciaPendiente transferencia = new TransferenciaPendiente();
-        transferencia.setProveedorID(
-            prestadorID
-        );
-        transferencia.setPagoID(
-            pago.getId()
-        );
-        transferencia.setMonto(
-            pago.getMontoNeto()
-        );
-        transferencia.setTitular(cuenta.getTitular());
-        transferencia.setBanco(cuenta.getBanco());
-        transferencia.setTipoCuenta(cuenta.getTipoCuenta());
-        transferencia.setNumeroCuenta(cuenta.getNumeroCuenta());
-        transferencia.setDocumento(cuenta.getDocumento());
-        transferenciaRepository.save(transferencia);
-
-        //Se actualiza el pago a EXITOSO y se marca el token como usado
-        pago.setEstadoPago(EstadoPago.EXITOSO);
-        pago.setTokenUsado(true);
-        pago.setReleasedAt(LocalDateTime.now());
-        pagoRepository.save(pago);
-
-        log.info(
-            "Pago {} confirmado. Transferencia pendiente creada para proveedor {}",
-            pago.getId(), prestadorID
-        );
-
-        return PagoMapper.pagoToResponse(pago,
-            "Servicio confirmado. El pago será transferido al proveedor en breve."
+            + servicio.getTitulo()
         );
     }
 
@@ -189,7 +107,7 @@ public class ServicioPagos {
     // OBTENER PAGO POR TOKEN
     // ─────────────────────────────────────────
     public PagoResponse obtenerPagoPorToken(String token) {
-        Optional<Pago> pagoOptional = pagoRepository.findByTokenConfirmacion(token);
+        Optional<Pago> pagoOptional = pagoRepository.findByTokenConfirmacionForUpdate(token);
 
         if (pagoOptional.isEmpty()) {
             PagoResponse response = new PagoResponse();
@@ -218,10 +136,7 @@ public class ServicioPagos {
         );
 
         PaymentIntent intent = stripeService.cobrar(pago);
-
-        pago.setTransactionID(
-            intent.getId()
-        );
+        
         pago.setStripePaymentIntentId(
             intent.getId()
         );
@@ -231,16 +146,12 @@ public class ServicioPagos {
 
     private void procesarPSE(Pago pago) {
         // Pendiente de implementación
-        log.info(
-            "Procesando PSE para pago {}", pago.getId()
-        );
+        throw new UnsupportedOperationException("El método de pago PSE aún no está disponible");
     }
 
     private void procesarEfectivo(Pago pago) {
         // Pendiente de implementación
-        log.info(
-            "Procesando efectivo para pago {}", pago.getId()
-        );
+        throw new UnsupportedOperationException("El método de pago en efectivo aún no está disponible");
     }
 
     private String generarTokenConfirmacion() {
