@@ -61,14 +61,32 @@ public class StripeService {
     }
 
     public void capturarPago(String stripePaymentIntentId) {
-        try {
-            PaymentIntent intent = PaymentIntent.retrieve(stripePaymentIntentId);
-            intent.capture();
-            log.info("PaymentIntent {} capturado exitosamente", stripePaymentIntentId);
+    try {
+        PaymentIntent intent = PaymentIntent.retrieve(stripePaymentIntentId);
 
-        } catch (StripeException e) {
-            log.error("Error capturando pago {}: {}", stripePaymentIntentId, e.getMessage());
-            throw new PagoFallidoException("Error capturando el pago: " + e.getMessage());
+        // Si ya fue capturado, no hacer nada (idempotencia)
+        if ("succeeded".equals(intent.getStatus())) {
+            log.info("PaymentIntent {} ya estaba capturado, se omite la captura", stripePaymentIntentId);
+            return;
         }
+
+        // Solo capturar si está en el estado esperado
+        if (!"requires_capture".equals(intent.getStatus())) {
+            log.warn(
+                "PaymentIntent {} no está en estado capturable (estado actual: {})",
+                stripePaymentIntentId, intent.getStatus()
+            );
+            throw new PagoFallidoException(
+                "El pago no se puede capturar en su estado actual: " + intent.getStatus()
+            );
+        }
+
+        intent.capture();
+        log.info("PaymentIntent {} capturado exitosamente", stripePaymentIntentId);
+
+    } catch (StripeException e) {
+        log.error("Error capturando pago {}: {}", stripePaymentIntentId, e.getMessage());
+        throw new PagoFallidoException("Error capturando el pago: " + e.getMessage());
     }
+}
 }

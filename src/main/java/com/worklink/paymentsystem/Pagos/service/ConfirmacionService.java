@@ -13,6 +13,7 @@ import com.worklink.paymentsystem.integrations.Response.ProveedorBancarioRespons
 import com.worklink.paymentsystem.integrations.service.PerfilProveedor;
 import com.worklink.paymentsystem.integrations.service.StripeService;
 
+import io.github.resilience4j.core.lang.NonNull;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -69,24 +70,8 @@ public class ConfirmacionService {
             pago.getStripePaymentIntentId()
         );
 
-        TransferenciaPendiente transferencia = crearTransferencia(pago, cuenta, prestadorID);
-
-        //Capturar el dinero en Stripe (ya queda en cuenta de Worklink)
-        stripeService.capturarPago(
-            pago.getStripePaymentIntentId()
-        );
-
-        transferencia.setTipoCuenta(
-            cuenta.getTipoCuenta()
-        );
-        transferencia.setNumeroCuenta(
-            cuenta.getNumeroCuenta()
-        );
-        transferencia.setDocumento(
-            cuenta.getDocumento()
-        );
-        transferenciaRepository.save(transferencia);
-
+        crearTransferencia(pago, cuenta, prestadorID);
+        
         //Actualizar el pago
         pago.setEstadoPago(EstadoPago.EXITOSO);
         pago.setTokenUsado(true);
@@ -101,7 +86,7 @@ public class ConfirmacionService {
         return PagoMapper.pagoToResponse(pago, "Servicio confirmado. El pago será transferido al proveedor en breve.");
     }
 
-    private TransferenciaPendiente crearTransferencia(Pago pago, ProveedorBancarioResponse cuenta, Long prestadorID) {
+    private void crearTransferencia(Pago pago, ProveedorBancarioResponse cuenta, Long prestadorID) {
         TransferenciaPendiente transferencia = new TransferenciaPendiente();
         transferencia.setProveedorID(prestadorID);
         transferencia.setPagoID(pago.getId());
@@ -111,7 +96,12 @@ public class ConfirmacionService {
         transferencia.setTipoCuenta(cuenta.getTipoCuenta());
         transferencia.setNumeroCuenta(cuenta.getNumeroCuenta());
         transferencia.setDocumento(cuenta.getDocumento());
-        return transferencia;
+
+        transferenciaRepository.save(transferencia);
+        log.info(
+            "Transferencia pendiente creada para pago {}: {} {} a {}",
+            pago.getId(), transferencia.getMonto(), pago.getMoneda(), cuenta.getNumeroCuenta()
+        );
     }
 
     

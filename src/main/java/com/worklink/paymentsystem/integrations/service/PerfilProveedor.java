@@ -7,7 +7,7 @@ import com.worklink.paymentsystem.integrations.Response.ProveedorBancarioRespons
 
 @FeignClient(name = "cuenta-bancaria", url = "http://localhost:8081")
 public interface PerfilProveedor {
-    @GetMapping("/api/perfil-servidor/cuenta-bancaria/{proveedorid}")
-    ProveedorBancarioResponse obtenerCuentaBancaria(@PathVariable("proveedorid") Long proveedorId);
+    @GetMapping("/api/perfil-servidor/cuenta-bancaria/{proveedorID}")
+    ProveedorBancarioResponse obtenerCuentaBancaria(@PathVariable("proveedorID") Long proveedorID);
 }
 

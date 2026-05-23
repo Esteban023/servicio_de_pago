@@ -46,12 +46,12 @@ public class TransferenciaPendiente {
     private LocalDateTime transferidoAt;
 
     public TransferenciaPendiente() {
-        this.id = UUID.randomUUID();
         this.createdAt = LocalDateTime.now();
         this.estado = "PENDIENTE";
     }
 
     // Getters y setters
+    public void setId(UUID id) { this.id = id; }
     public UUID getId() { return id; }
     public Long getProveedorID() { return proveedorID; }
     public void setProveedorID(Long proveedorID) { this.proveedorID = proveedorID; }

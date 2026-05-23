@@ -14,6 +14,7 @@ public class PagoResponse {
     private String estadoPago;
     private String metodoPago;
     private BigDecimal montoPago;
+    private String tokenConfirmacion;
     
     public UUID getPagoID() {
         return pagoID;
@@ -87,4 +88,11 @@ public class PagoResponse {
         this.montoPago = montoPago;
     }
 
+    public String getTokenConfirmacion() {
+        return tokenConfirmacion;
+    }
+
+    public void setTokenConfirmacion(String tokenConfirmacion) {
+        this.tokenConfirmacion = tokenConfirmacion;
+    }
 }

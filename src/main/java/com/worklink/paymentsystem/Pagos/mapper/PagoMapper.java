@@ -6,6 +6,7 @@ import com.worklink.paymentsystem.Pagos.model.Pago;
 public class PagoMapper {
     
     public static PagoResponse pagoToResponse(Pago pago, String mensaje) {
+        
         PagoResponse response = new PagoResponse();
         response.setPagoID(pago.getId());
         response.setMensaje(mensaje);
@@ -16,6 +17,7 @@ public class PagoMapper {
         response.setEstadoPago(pago.getEstadoPago().name());
         response.setMetodoPago(pago.getMetodoPago().name());
         response.setMonto(pago.getMonto());
+        response.setTokenConfirmacion(pago.getTokenConfirmacion());
         
         return response;
     }
