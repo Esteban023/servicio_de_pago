@@ -1,6 +1,8 @@
 package com.worklink.paymentsystem.Pagos.service;
 
 import org.slf4j.Logger;
+
+import java.util.List;
 import java.util.Optional;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -166,5 +168,8 @@ public class ServicioPagos {
             );
         }
         return token.toString(); // Ej: "K7M2P9XQ"
+    }
+    public List<Pago> obtenerPorCliente(Long clienteID){
+        return pagoRepository.findByClienteID(clienteID);
     }
 }

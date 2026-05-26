@@ -1,5 +1,6 @@
 package com.worklink.paymentsystem.Pagos.repository;
 
+import java.util.List;
 import java.util.UUID;
 import java.util.Optional;
 import jakarta.persistence.LockModeType;
@@ -18,4 +19,5 @@ public interface PagoRepository extends JpaRepository<Pago, UUID> {
     Optional<Pago> findByTokenConfirmacionForUpdate(@Param("token") String token);
     
     Optional<Pago> findByStripePaymentIntentId(String paymentIntentId);
+    List<Pago> findByClienteID(Long clienteId);
 }

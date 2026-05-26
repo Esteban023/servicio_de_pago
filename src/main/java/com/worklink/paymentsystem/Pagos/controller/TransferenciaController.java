@@ -26,6 +26,13 @@ public class TransferenciaController {
         );
     }
 
+    @GetMapping("proveedor/{proveedorID}")
+    public ResponseEntity<List<TransferenciaPendiente>> obtenerPorProveedor(@PathVariable Long proveedorID){
+        List<TransferenciaPendiente> transferencias = transferenciaRepository.findByProveedorID(proveedorID);
+        return ResponseEntity.ok(transferencias);
+
+    }
+
     // Marcar como transferido después de hacer la transferencia bancaria manual
     @PutMapping("/{id}/transferido")
     public ResponseEntity<Void> marcarComoTransferido(@PathVariable @NonNull UUID id) {

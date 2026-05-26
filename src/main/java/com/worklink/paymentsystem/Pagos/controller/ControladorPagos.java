@@ -1,5 +1,6 @@
 package com.worklink.paymentsystem.Pagos.controller;
 
+import com.worklink.paymentsystem.Pagos.model.Pago;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -12,6 +13,8 @@ import com.worklink.paymentsystem.Pagos.dto.Response.PagoResponse;
 import com.worklink.paymentsystem.Pagos.dto.Response.TransferenciaResponse;
 import com.worklink.paymentsystem.Pagos.service.ConfirmacionService;
 import com.worklink.paymentsystem.Pagos.service.ServicioPagos;
+
+import java.util.List;
 
 @RestController
 @RequiredArgsConstructor
@@ -36,5 +39,10 @@ public class ControladorPagos {
     ) {
         TransferenciaResponse response = confirmacionService.confirmarConToken(token, prestadorID);
         return ResponseEntity.ok(response);
+    }
+    @GetMapping("/cliente/{clienteID}")
+    public ResponseEntity<List<Pago>> obtenerPagoPorCliente(@PathVariable Long clienteID){
+        List<Pago> pagos = pagoService.obtenerPorCliente(clienteID);
+        return ResponseEntity.ok(pagos);
     }
 }
